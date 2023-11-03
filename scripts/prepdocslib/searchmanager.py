@@ -15,6 +15,11 @@ from azure.search.documents.indexes.models import (
     SimpleField,
     VectorSearch,
     VectorSearchAlgorithmConfiguration,
+    HnswVectorSearchAlgorithmConfiguration,
+    ExhaustiveKnnVectorSearchAlgorithmConfiguration,
+    ExhaustiveKnnParameters,
+    VectorSearchAlgorithmKind,
+    VectorSearchProfile
 )
 
 from .blobmanager import BlobManager
@@ -65,13 +70,8 @@ class SearchManager:
                 SearchField(
                     name="embedding",
                     type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
-                    hidden=False,
-                    searchable=True,
-                    filterable=False,
-                    sortable=False,
-                    facetable=False,
                     vector_search_dimensions=1536,
-                    vector_search_configuration="default",
+                    vector_search_profile="myHnswProfile"
                 ),
                 SimpleField(name="category", type="Edm.String", filterable=True, facetable=True),
                 SimpleField(name="year", type="Edm.String", filterable=True, facetable=True),                
@@ -90,6 +90,46 @@ class SearchManager:
                     )
                 )
 
+            # vector_search = VectorSearch(
+            #     algorithm_configurations=[
+            #         VectorSearchAlgorithmConfiguration(
+            #             name="myHnsw", kind="hnsw", hnsw_parameters=HnswParameters(metric="cosine")
+            #         )
+            #     ]
+            # )
+            
+            vector_search = VectorSearch(  
+                algorithms=[  
+                    HnswVectorSearchAlgorithmConfiguration(  
+                        name="myHnsw",  
+                        kind=VectorSearchAlgorithmKind.HNSW,  
+                        parameters=HnswParameters(  
+                            m=4,  
+                            ef_construction=400,  
+                            ef_search=1000,  
+                            metric="cosine",  
+                        ),  
+                    ),  
+                    ExhaustiveKnnVectorSearchAlgorithmConfiguration(  
+                        name="myExhaustiveKnn",  
+                        kind=VectorSearchAlgorithmKind.EXHAUSTIVE_KNN,  
+                        parameters=ExhaustiveKnnParameters(  
+                            metric="cosine",  
+                        ),  
+                    ), 
+                ],  
+                profiles=[  
+                        VectorSearchProfile(  
+                            name="myHnswProfile",  
+                            algorithm="myHnsw",  
+                        ),  
+                        VectorSearchProfile(  
+                            name="myExhaustiveKnnProfile",  
+                            algorithm="myExhaustiveKnn",  
+                        ),  
+                    ],  
+            )  
+
             index = SearchIndex(
                 name=self.search_info.index_name,
                 fields=fields,
@@ -103,13 +143,7 @@ class SearchManager:
                         )
                     ]
                 ),
-                vector_search=VectorSearch(
-                    algorithm_configurations=[
-                        VectorSearchAlgorithmConfiguration(
-                            name="default", kind="hnsw", hnsw_parameters=HnswParameters(metric="cosine")
-                        )
-                    ]
-                ),
+                vector_search=vector_search,
             )
             if self.search_info.index_name not in [name async for name in search_index_client.list_index_names()]:
                 if self.search_info.verbose:
